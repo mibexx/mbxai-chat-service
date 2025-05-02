@@ -5,7 +5,8 @@ from pydantic import BaseModel, Field
 from typing import Optional, Any
 import json
 
-from ..clients.openrouter import OpenRouterApiClient, OpenRouterModel
+from ..clients.mcp import McpClient, OpenRouterModel
+from ..config import get_mcp_config
 
 # Create a router for project-level endpoints
 router = APIRouter(prefix="/api", tags=["api"])
@@ -62,8 +63,13 @@ async def chat(request: ChatRequest) -> ChatResponse:
         ChatResponse containing the response, tool calls, and message history
     """
     try:
-        # Initialize OpenRouter client
-        client = OpenRouterApiClient(model=OpenRouterModel.GPT_41)
+        # Initialize McpClient
+        client = McpClient(model=OpenRouterModel.GPT_41)
+
+        # Get MCP config and connect to server if configured
+        mcp_config = get_mcp_config()
+        if mcp_config.server_url:
+            await client.add_http_mcp_server(mcp_config.server_url)
 
         # Prepare messages for the chat
         messages = []
