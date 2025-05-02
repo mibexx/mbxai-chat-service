@@ -1,0 +1,19 @@
+apiVersion: mbxai.cloud/v1
+kind: MbxAiResource
+metadata:
+  name: "chat_service"
+  namespace: mbxai-sandbox
+spec:
+  name: "Chat Service"
+  repoUrl: "https://github.com/mibexx/chat_service"
+  key: "chat_service-key"
+  baseImage: "mibexx/mbxai-service:latest"
+  port: 5000
+  expose: false
+  runCommand: ["service"]
+  customEnvVars:
+    - "CHAT_SERVICE_NAME": "Chat Service"
+    - "CHAT_SERVICE_LOG_LEVEL": "INFO"
+  customSecrets:
+    - "CHAT_SERVICE_OPENROUTER_API_KEY": "your-openrouter-api-key"
+    - "CHAT_SERVICE_OPENROUTER_BASE_URL": "https://openrouter.ai/api/v1"

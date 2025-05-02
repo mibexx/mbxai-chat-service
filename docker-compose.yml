@@ -1,0 +1,17 @@
+version: "3"
+
+services:
+  service:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "5000:5000"
+    environment:
+      - "CHAT_SERVICE_NAME=Chat Service"
+      - "CHAT_SERVICE_LOG_LEVEL=20"
+      - "CHAT_SERVICE_OPENROUTER_API_KEY=${OPENROUTER_API_KEY}"
+      - "CHAT_SERVICE_OPENROUTER_BASE_URL=https://openrouter.ai/api/v1"
+    volumes:
+      - ./src:/app/src
+    restart: unless-stopped
