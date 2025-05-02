@@ -114,8 +114,21 @@ response = requests.post(
 
 The service requires the following environment variables:
 
-- `OPENROUTER_API_KEY`: API key for OpenRouter
-- `OPENROUTER_BASE_URL`: Base URL for OpenRouter API
+### Application Configuration
+
+These variables are prefixed with `CHAT_SERVICE_`:
+
+- `CHAT_SERVICE_NAME`: Name of your service (default: "Chat Service")
+- `CHAT_SERVICE_VERSION`: Version of your service (default: package version)
+- `CHAT_SERVICE_LOG_LEVEL`: Logging level (default: 20 for INFO)
+
+### AI Service Configuration
+
+- `OPENROUTER_TOKEN`: Your OpenRouter API token for AI model interactions
+- `OPENROUTER_BASE_URL`: Base URL for OpenRouter API (default: "https://openrouter.ai/api/v1")
+- `MCP_SERVER_URL`: URL of the Model Context Protocol server (optional)
+
+These can be set in your environment or in a `.env` file in the project root.
 
 ## Development
 
@@ -135,9 +148,16 @@ The service requires the following environment variables:
    ```
 
 3. Set up environment variables:
+
    ```bash
-   export OPENROUTER_API_KEY=your_api_key
-   export OPENROUTER_BASE_URL=your_base_url
+   # Application configuration
+   export CHAT_SERVICE_NAME="Chat Service"
+   export CHAT_SERVICE_LOG_LEVEL=20
+
+   # AI service configuration
+   export OPENROUTER_TOKEN=your_api_key
+   export OPENROUTER_BASE_URL=https://openrouter.ai/api/v1
+   export MCP_SERVER_URL=your_mcp_server_url  # Optional
    ```
 
 ### Running the Service
