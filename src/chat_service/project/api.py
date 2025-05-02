@@ -2,7 +2,7 @@
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
-from typing import Optional, list
+from typing import Optional
 import json
 
 from ..clients.openrouter import OpenRouterApiClient, OpenRouterModel
