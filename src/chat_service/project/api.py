@@ -68,10 +68,6 @@ async def chat(request: ChatRequest) -> ChatResponse:
         # Prepare messages for the chat
         messages = []
 
-        # Add system prompt if provided
-        if request.system_prompt:
-            messages.append({"role": "system", "content": request.system_prompt})
-
         # Handle history and cleaning
         if request.ident:
             if request.clean:
@@ -82,6 +78,24 @@ async def chat(request: ChatRequest) -> ChatResponse:
             else:
                 # Add existing history
                 messages.extend(chat_history[request.ident])
+
+        # Add system prompt if provided
+        if request.system_prompt:
+            # Check if this system prompt is already in the history
+            has_system_prompt = any(
+                msg["role"] == "system" and msg["content"] == request.system_prompt
+                for msg in messages
+            )
+
+            if not has_system_prompt:
+                # Add system prompt to messages for this request
+                messages.append({"role": "system", "content": request.system_prompt})
+
+                # Add system prompt to history if ident is provided
+                if request.ident:
+                    chat_history[request.ident].append(
+                        {"role": "system", "content": request.system_prompt}
+                    )
 
         # Add the current user message
         messages.append({"role": "user", "content": request.prompt})
