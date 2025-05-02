@@ -110,7 +110,6 @@ async def chat(request: ChatRequest) -> ChatResponse:
         response = await client.agent(
             messages=messages,
             max_iterations=request.max_iterations,
-            call_tools=request.use_tools,
         )
 
         # Extract tool calls from the response
