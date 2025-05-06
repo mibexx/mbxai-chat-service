@@ -130,7 +130,14 @@ async def chat(request: ChatRequest) -> ChatResponse:
                 # Handle both string and dictionary arguments
                 arguments = tool_call["function"]["arguments"]
                 if isinstance(arguments, str):
-                    arguments = json.loads(arguments)
+                    try:
+                        arguments = json.loads(arguments)
+                    except json.JSONDecodeError:
+                        # If JSON parsing fails, create a dictionary with the raw string
+                        arguments = {"raw": arguments}
+                elif not isinstance(arguments, dict):
+                    # If arguments is neither string nor dict, wrap it in a dict
+                    arguments = {"value": str(arguments)}
                 
                 tool_calls.append(
                     ToolCall(
