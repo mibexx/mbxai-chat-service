@@ -156,27 +156,27 @@ async def chat(request: ChatRequest) -> ChatResponse:
                 )
 
                 # Add assistant response to history
-                if "content" not in response:
+                if not response.choices or not response.choices[0].message.content:
                     logger.error(f"Response missing content: {response}")
                     raise HTTPException(status_code=500, detail="Response missing content")
                 
                 chat_history[request.ident].append(
-                    {"role": "assistant", "content": response["content"]}
+                    {"role": "assistant", "content": response.choices[0].message.content}
                 )
 
                 # Keep only the last 5 messages
                 chat_history[request.ident] = chat_history[request.ident][-5:]
 
                 return ChatResponse(
-                    response=response["content"],
+                    response=response.choices[0].message.content,
                     tool_calls=tool_calls,
                     history=chat_history[request.ident],
                 )
             else:
-                if "content" not in response:
+                if not response.choices or not response.choices[0].message.content:
                     logger.error(f"Response missing content: {response}")
                     raise HTTPException(status_code=500, detail="Response missing content")
-                return ChatResponse(response=response["content"], tool_calls=tool_calls)
+                return ChatResponse(response=response.choices[0].message.content, tool_calls=tool_calls)
 
         except Exception as e:
             logger.error(f"Error processing chat: {str(e)}", exc_info=True)
