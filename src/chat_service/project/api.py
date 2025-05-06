@@ -127,10 +127,15 @@ async def chat(request: ChatRequest) -> ChatResponse:
         tool_calls = []
         if "tool_calls" in response:
             for tool_call in response["tool_calls"]:
+                # Handle both string and dictionary arguments
+                arguments = tool_call["function"]["arguments"]
+                if isinstance(arguments, str):
+                    arguments = json.loads(arguments)
+                
                 tool_calls.append(
                     ToolCall(
                         name=tool_call["function"]["name"],
-                        arguments=json.loads(tool_call["function"]["arguments"]),
+                        arguments=arguments,
                         result=tool_call.get("result"),
                     )
                 )
