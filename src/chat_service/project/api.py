@@ -175,7 +175,6 @@ async def chat(request: ChatRequest) -> ChatResponse:
 
                 return ChatResponse(
                     response=message,
-                    tool_calls=tool_calls,
                     history=chat_history[request.ident],
                 )
             else:
