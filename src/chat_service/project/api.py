@@ -4,10 +4,14 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 from typing import Optional, Any
 import json
+import logging
 
 from mbxai.openrouter import OpenRouterClient
 from mbxai.mcp import MCPClient
 from ..config import get_mcp_config, get_openrouter_api_config
+
+# Set up logging
+logger = logging.getLogger(__name__)
 
 # Create a router for project-level endpoints
 router = APIRouter(prefix="/api", tags=["api"])
@@ -119,30 +123,17 @@ async def chat(request: ChatRequest) -> ChatResponse:
 
         # Process the chat using OpenRouter
         response = await client.chat(
-            messages=messages,
-            max_iterations=request.max_iterations,
+            messages=messages
         )
 
         # Extract tool calls from the response
         tool_calls = []
         if "tool_calls" in response:
             for tool_call in response["tool_calls"]:
-                # Handle both string and dictionary arguments
-                arguments = tool_call["function"]["arguments"]
-                if isinstance(arguments, str):
-                    try:
-                        arguments = json.loads(arguments)
-                    except json.JSONDecodeError:
-                        # If JSON parsing fails, create a dictionary with the raw string
-                        arguments = {"raw": arguments}
-                elif not isinstance(arguments, dict):
-                    # If arguments is neither string nor dict, wrap it in a dict
-                    arguments = {"value": str(arguments)}
-                
                 tool_calls.append(
                     ToolCall(
                         name=tool_call["function"]["name"],
-                        arguments=arguments,
+                        arguments=tool_call["function"]["arguments"],
                         result=tool_call.get("result"),
                     )
                 )
