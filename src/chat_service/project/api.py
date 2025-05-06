@@ -5,8 +5,9 @@ from pydantic import BaseModel, Field
 from typing import Optional, Any
 import json
 
-from ..clients.mcp import McpClient, OpenRouterModel
-from ..config import get_mcp_config
+from mbxai.openrouter import OpenRouterClient
+from mbxai.mcp import MCPClient
+from ..config import get_mcp_config, get_openrouter_api_config
 
 # Create a router for project-level endpoints
 router = APIRouter(prefix="/api", tags=["api"])
@@ -63,13 +64,23 @@ async def chat(request: ChatRequest) -> ChatResponse:
         ChatResponse containing the response, tool calls, and message history
     """
     try:
-        # Initialize McpClient
-        client = McpClient(model=OpenRouterModel.GPT_41)
+        # Initialize OpenRouter client
+        openrouter_config = get_openrouter_api_config()
+        openrouter_client = OpenRouterClient(
+            token=openrouter_config.api_key,
+            base_url=openrouter_config.base_url
+        )
+
+        # Initialize MCP client with OpenRouter client
+        client = MCPClient(openrouter_client)
 
         # Get MCP config and connect to server if configured
         mcp_config = get_mcp_config()
         if mcp_config.server_url:
-            await client.add_http_mcp_server(mcp_config.server_url)
+            await client.register_mcp_server(
+                name="mcp-server",
+                base_url=mcp_config.server_url
+            )
 
         # Prepare messages for the chat
         messages = []
@@ -107,7 +118,7 @@ async def chat(request: ChatRequest) -> ChatResponse:
         messages.append({"role": "user", "content": request.prompt})
 
         # Process the chat using OpenRouter
-        response = await client.agent(
+        response = await client.chat(
             messages=messages,
             max_iterations=request.max_iterations,
         )
