@@ -51,7 +51,7 @@ dependencies = [
 [package.metadata]
 requires-dist = [
     { name = "fastapi", specifier = ">=0.110.0" },
-    { name = "mbxai", specifier = ">=0.5.24" },
+    { name = "mbxai", specifier = ">=0.5.25" },
     { name = "openai", specifier = ">=1.66.0" },
     { name = "pydantic", specifier = ">=2.10.6" },
     { name = "pydantic-settings", specifier = ">=2.8.0" },
@@ -180,7 +180,7 @@ wheels = [
 
 [[package]]
 name = "mbxai"
-version = "0.5.24"
+version = "0.5.25"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "fastapi" },
@@ -194,9 +194,9 @@ dependencies = [
     { name = "starlette" },
     { name = "uvicorn" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/d8/12/1bbe30741cca82dd449d02983daebe90fd0eb4eacb026a5d75a6a19d49a5/mbxai-0.5.24.tar.gz", hash = "sha256:0b03a6b5cae119dfd551571afba7d93bc053314a464b333d1ee992ad6c73157a", size = 61001 }
+sdist = { url = "https://files.pythonhosted.org/packages/e3/74/d8422d93a8d2e982f87d218e85a9d9692f280fc04fe373453a9a1fee4ab1/mbxai-0.5.25.tar.gz", hash = "sha256:291b455f7c7d419d49502c677622dae5392644088d9e321ca40c4d43f0c5772c", size = 60997 }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/29/a5/05e0b9a9bf507360b4975f75eb98e4c5325e62cb6a5ffeca889f285c446a/mbxai-0.5.24-py3-none-any.whl", hash = "sha256:def1c062b7e77a3506b086fc1b966cf563af4a34899e88448952b83eadafab66", size = 19312 },
+    { url = "https://files.pythonhosted.org/packages/9c/07/7233bf921673936667a9cb728824147a572c547c854d06dd042a5fa37a7f/mbxai-0.5.25-py3-none-any.whl", hash = "sha256:b22a813d562c8927b7adf6e3dbe792b6b18a7304f55cbf961d6afab51f418781", size = 19314 },
 ]
 
 [[package]]
