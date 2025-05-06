@@ -6,7 +6,7 @@ from typing import Optional, Any
 import json
 import logging
 
-from mbxai.openrouter import OpenRouterClient
+from mbxai.openrouter import OpenRouterClient, OpenRouterModel
 from mbxai.mcp import MCPClient
 from ..config import get_mcp_config, get_openrouter_api_config
 
@@ -72,7 +72,8 @@ async def chat(request: ChatRequest) -> ChatResponse:
         openrouter_config = get_openrouter_api_config()
         openrouter_client = OpenRouterClient(
             token=openrouter_config.api_key,
-            base_url=openrouter_config.base_url
+            base_url=openrouter_config.base_url,
+            model=OpenRouterModel.GPT41
         )
 
         # Initialize MCP client with OpenRouter client
