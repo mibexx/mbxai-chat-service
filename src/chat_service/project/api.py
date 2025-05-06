@@ -143,25 +143,27 @@ async def chat(request: ChatRequest) -> ChatResponse:
         # Process the chat using OpenRouter
         try:
             response = await client.chat(
-                messages=messages
+                messages=messages,
+                model=OpenRouterModel.GPT41
             )
 
-            if response is None:
-                logger.error("Received None response from client.chat")
+            if not response or not response.choices:
+                logger.error("Received empty response from client.chat")
                 raise HTTPException(status_code=500, detail="Received empty response from chat service")
+
+            message = response.choices[0].message
+            if not message:
+                logger.error("Response missing message")
+                raise HTTPException(status_code=500, detail="Response missing message")
 
             # Extract tool calls from the response
             tool_calls = []
-            if "tool_calls" in response:
-                for tool_call in response["tool_calls"]:
-                    if not tool_call or "function" not in tool_call:
-                        logger.warning(f"Skipping invalid tool call: {tool_call}")
-                        continue
-                    
+            if message.tool_calls:
+                for tool_call in message.tool_calls:
                     tool_calls.append(
                         ToolCall(
-                            name=tool_call["function"]["name"],
-                            arguments=tool_call["function"]["arguments"],
+                            name=tool_call.function.name,
+                            arguments=tool_call.function.arguments,
                             result=tool_call.get("result"),
                         )
                     )
@@ -174,27 +176,27 @@ async def chat(request: ChatRequest) -> ChatResponse:
                 )
 
                 # Add assistant response to history
-                if not response.choices or not response.choices[0].message.content:
+                if not message.content:
                     logger.error(f"Response missing content: {response}")
                     raise HTTPException(status_code=500, detail="Response missing content")
                 
                 chat_history[request.ident].append(
-                    {"role": "assistant", "content": response.choices[0].message.content}
+                    {"role": "assistant", "content": message.content}
                 )
 
                 # Keep only the last 5 messages
                 chat_history[request.ident] = chat_history[request.ident][-5:]
 
                 return ChatResponse(
-                    response=response.choices[0].message.content,
+                    response=message.content,
                     tool_calls=tool_calls,
                     history=chat_history[request.ident],
                 )
             else:
-                if not response.choices or not response.choices[0].message.content:
+                if not message.content:
                     logger.error(f"Response missing content: {response}")
                     raise HTTPException(status_code=500, detail="Response missing content")
-                return ChatResponse(response=response.choices[0].message.content, tool_calls=tool_calls)
+                return ChatResponse(response=message.content, tool_calls=tool_calls)
 
         except Exception as e:
             logger.error(f"Error processing chat: {str(e)}", exc_info=True)
@@ -274,29 +276,27 @@ async def chat_json(request: ChatRequest) -> StructuredChatResponse:
         try:
             response = await client.parse(
                 messages=messages,
-                response_format=ChatResponseFormat
+                response_format=ChatResponseFormat,
+                model=OpenRouterModel.GPT41
             )
 
-            if response is None:
-                logger.error("Received None response from client.parse")
+            if not response or not response.choices:
+                logger.error("Received empty response from client.parse")
                 raise HTTPException(status_code=500, detail="Received empty response from chat service")
 
-            # Extract tool calls from the response
-            tool_calls = response.choices[0].message.tool_calls or []
+            message = response.choices[0].message
+            if not message:
+                logger.error("Response missing message")
+                raise HTTPException(status_code=500, detail="Response missing message")
 
-            # Try to parse the response content as JSON
+            # Extract tool calls from the response
+            tool_calls = message.tool_calls or []
+
+            # Get content and parsed content
+            content = message.content
             parsed_content = None
-            content = None
-            if hasattr(response.choices[0].message, "parsed"):
-                content = response.choices[0].message.parsed.content
-                parsed_content = response.choices[0].message.parsed
-            else:
-                content = response.choices[0].message.content
-                try:
-                    parsed_content = json.loads(content)
-                except json.JSONDecodeError:
-                    # If content is not valid JSON, leave parsed_content as None
-                    pass
+            if hasattr(message, "parsed"):
+                parsed_content = message.parsed
 
             # Update history if ident is provided
             if request.ident:
