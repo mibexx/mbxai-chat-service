@@ -122,13 +122,10 @@ async def chat(request: ChatRequest) -> ChatResponse:
         messages.append({"role": "user", "content": request.prompt})
 
         # Process the chat using OpenRouter
-        logger.debug(f"Sending chat request with messages: {messages}")
         try:
             response = await client.chat(
                 messages=messages
             )
-            logger.debug(f"Received response type: {type(response)}")
-            logger.debug(f"Received response: {response}")
 
             if response is None:
                 logger.error("Received None response from client.chat")
@@ -137,14 +134,11 @@ async def chat(request: ChatRequest) -> ChatResponse:
             # Extract tool calls from the response
             tool_calls = []
             if "tool_calls" in response:
-                logger.debug(f"Found tool_calls in response: {response['tool_calls']}")
                 for tool_call in response["tool_calls"]:
-                    logger.debug(f"Processing tool call: {tool_call}")
                     if not tool_call or "function" not in tool_call:
                         logger.warning(f"Skipping invalid tool call: {tool_call}")
                         continue
                     
-                    logger.debug(f"Tool call function: {tool_call['function']}")
                     tool_calls.append(
                         ToolCall(
                             name=tool_call["function"]["name"],
@@ -152,12 +146,9 @@ async def chat(request: ChatRequest) -> ChatResponse:
                             result=tool_call.get("result"),
                         )
                     )
-            else:
-                logger.debug("No tool calls found in response")
 
             # Update history if ident is provided
             if request.ident:
-                logger.debug(f"Updating history for ident: {request.ident}")
                 # Add user message to history
                 chat_history[request.ident].append(
                     {"role": "user", "content": request.prompt}
@@ -174,7 +165,6 @@ async def chat(request: ChatRequest) -> ChatResponse:
 
                 # Keep only the last 5 messages
                 chat_history[request.ident] = chat_history[request.ident][-5:]
-                logger.debug(f"Updated history: {chat_history[request.ident]}")
 
                 return ChatResponse(
                     response=response["content"],
