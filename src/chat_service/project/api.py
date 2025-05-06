@@ -53,7 +53,6 @@ class ChatResponse(BaseModel):
     """Chat response model."""
 
     response: str
-    tool_calls: list[ToolCall] = Field(default_factory=list)
     history: list[dict[str, str]] = Field(default_factory=list)
 
 
@@ -61,7 +60,6 @@ class StructuredChatResponse(BaseModel):
     """Structured chat response model with parsed content."""
 
     content: str
-    tool_calls: list[ToolCall] = Field(default_factory=list)
     history: list[dict[str, str]] = Field(default_factory=list)
     parsed_content: Optional[dict[str, Any]] = Field(
         None, description="Structured parsed content from the response"
@@ -147,26 +145,14 @@ async def chat(request: ChatRequest) -> ChatResponse:
                 model=OpenRouterModel.GPT41
             )
 
-            if not response or not response.choices:
+            if not response or not response.output_text:
                 logger.error("Received empty response from client.chat")
                 raise HTTPException(status_code=500, detail="Received empty response from chat service")
 
-            message = response.choices[0].message
+            message = response.output_text
             if not message:
                 logger.error("Response missing message")
                 raise HTTPException(status_code=500, detail="Response missing message")
-
-            # Extract tool calls from the response
-            tool_calls = []
-            if message.tool_calls:
-                for tool_call in message.tool_calls:
-                    tool_calls.append(
-                        ToolCall(
-                            name=tool_call.function.name,
-                            arguments=tool_call.function.arguments,
-                            result=tool_call.get("result"),
-                        )
-                    )
 
             # Update history if ident is provided
             if request.ident:
@@ -176,27 +162,27 @@ async def chat(request: ChatRequest) -> ChatResponse:
                 )
 
                 # Add assistant response to history
-                if not message.content:
+                if not message:
                     logger.error(f"Response missing content: {response}")
                     raise HTTPException(status_code=500, detail="Response missing content")
                 
                 chat_history[request.ident].append(
-                    {"role": "assistant", "content": message.content}
+                    {"role": "assistant", "content": message}
                 )
 
                 # Keep only the last 5 messages
                 chat_history[request.ident] = chat_history[request.ident][-5:]
 
                 return ChatResponse(
-                    response=message.content,
+                    response=message,
                     tool_calls=tool_calls,
                     history=chat_history[request.ident],
                 )
             else:
-                if not message.content:
+                if not message:
                     logger.error(f"Response missing content: {response}")
                     raise HTTPException(status_code=500, detail="Response missing content")
-                return ChatResponse(response=message.content, tool_calls=tool_calls)
+                return ChatResponse(response=message)
 
         except Exception as e:
             logger.error(f"Error processing chat: {str(e)}", exc_info=True)
