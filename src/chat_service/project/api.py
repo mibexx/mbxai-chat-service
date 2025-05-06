@@ -282,13 +282,18 @@ async def chat_json(request: ChatRequest) -> StructuredChatResponse:
                 raise HTTPException(status_code=500, detail="Received empty response from chat service")
 
             # Extract tool calls from the response
-            tool_calls = response.tool_calls or []
+            tool_calls = response.choices[0].message.tool_calls or []
 
             # Try to parse the response content as JSON
             parsed_content = None
-            if response.content:
+            content = None
+            if hasattr(response.choices[0].message, "parsed"):
+                content = response.choices[0].message.parsed.content
+                parsed_content = response.choices[0].message.parsed
+            else:
+                content = response.choices[0].message.content
                 try:
-                    parsed_content = json.loads(response.content)
+                    parsed_content = json.loads(content)
                 except json.JSONDecodeError:
                     # If content is not valid JSON, leave parsed_content as None
                     pass
@@ -301,29 +306,29 @@ async def chat_json(request: ChatRequest) -> StructuredChatResponse:
                 )
 
                 # Add assistant response to history
-                if not response.content:
+                if not content:
                     logger.error(f"Response missing content: {response}")
                     raise HTTPException(status_code=500, detail="Response missing content")
                 
                 chat_history[request.ident].append(
-                    {"role": "assistant", "content": response.content}
+                    {"role": "assistant", "content": content}
                 )
 
                 # Keep only the last 5 messages
                 chat_history[request.ident] = chat_history[request.ident][-5:]
 
                 return StructuredChatResponse(
-                    content=response.content,
+                    content=content,
                     tool_calls=tool_calls,
                     history=chat_history[request.ident],
                     parsed_content=parsed_content
                 )
             else:
-                if not response.content:
+                if not content:
                     logger.error(f"Response missing content: {response}")
                     raise HTTPException(status_code=500, detail="Response missing content")
                 return StructuredChatResponse(
-                    content=response.content,
+                    content=content,
                     tool_calls=tool_calls,
                     parsed_content=parsed_content
                 )
