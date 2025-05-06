@@ -57,6 +57,24 @@ class ChatResponse(BaseModel):
     history: list[dict[str, str]] = Field(default_factory=list)
 
 
+class StructuredChatResponse(BaseModel):
+    """Structured chat response model with parsed content."""
+
+    content: str
+    tool_calls: list[ToolCall] = Field(default_factory=list)
+    history: list[dict[str, str]] = Field(default_factory=list)
+    parsed_content: Optional[dict[str, Any]] = Field(
+        None, description="Structured parsed content from the response"
+    )
+
+
+class ChatResponseFormat(BaseModel):
+    """Format for the chat response."""
+
+    content: str
+    tool_calls: Optional[list[ToolCall]] = None
+
+
 @router.post("/chat", response_model=ChatResponse)
 async def chat(request: ChatRequest) -> ChatResponse:
     """Process a chat message and maintain history if ident is provided.
@@ -177,6 +195,138 @@ async def chat(request: ChatRequest) -> ChatResponse:
                     logger.error(f"Response missing content: {response}")
                     raise HTTPException(status_code=500, detail="Response missing content")
                 return ChatResponse(response=response.choices[0].message.content, tool_calls=tool_calls)
+
+        except Exception as e:
+            logger.error(f"Error processing chat: {str(e)}", exc_info=True)
+            raise HTTPException(status_code=500, detail=f"Failed to process chat: {str(e)}")
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to process chat: {str(e)}")
+
+
+@router.post("/chat-json", response_model=StructuredChatResponse)
+async def chat_json(request: ChatRequest) -> StructuredChatResponse:
+    """Process a chat message and return structured response.
+
+    Args:
+        request: The chat request containing the prompt and optional parameters
+
+    Returns:
+        StructuredChatResponse containing the response, tool calls, message history,
+        and parsed content
+    """
+    try:
+        # Initialize OpenRouter client
+        openrouter_config = get_openrouter_api_config()
+        openrouter_client = OpenRouterClient(
+            token=openrouter_config.api_key,
+            base_url=openrouter_config.base_url,
+            model=OpenRouterModel.GPT41
+        )
+
+        # Initialize MCP client with OpenRouter client
+        client = MCPClient(openrouter_client)
+
+        # Get MCP config and connect to server if configured
+        mcp_config = get_mcp_config()
+        if mcp_config.server_url:
+            await client.register_mcp_server(
+                name="mcp-server",
+                base_url=mcp_config.server_url
+            )
+
+        # Prepare messages for the chat
+        messages = []
+
+        # Handle history and cleaning
+        if request.ident:
+            if request.clean:
+                # Clear history for the ident
+                chat_history[request.ident] = []
+            elif request.ident not in chat_history:
+                chat_history[request.ident] = []
+            else:
+                # Add existing history
+                messages.extend(chat_history[request.ident])
+
+        # Add system prompt if provided
+        if request.system_prompt:
+            # Check if this system prompt is already in the history
+            has_system_prompt = any(
+                msg["role"] == "system" and msg["content"] == request.system_prompt
+                for msg in messages
+            )
+
+            if not has_system_prompt:
+                # Add system prompt to messages for this request
+                messages.append({"role": "system", "content": request.system_prompt})
+
+                # Add system prompt to history if ident is provided
+                if request.ident:
+                    chat_history[request.ident].append(
+                        {"role": "system", "content": request.system_prompt}
+                    )
+
+        # Add the current user message
+        messages.append({"role": "user", "content": request.prompt})
+
+        # Process the chat using OpenRouter with parse
+        try:
+            response = await client.parse(
+                messages=messages,
+                response_format=ChatResponseFormat
+            )
+
+            if response is None:
+                logger.error("Received None response from client.parse")
+                raise HTTPException(status_code=500, detail="Received empty response from chat service")
+
+            # Extract tool calls from the response
+            tool_calls = response.tool_calls or []
+
+            # Try to parse the response content as JSON
+            parsed_content = None
+            if response.content:
+                try:
+                    parsed_content = json.loads(response.content)
+                except json.JSONDecodeError:
+                    # If content is not valid JSON, leave parsed_content as None
+                    pass
+
+            # Update history if ident is provided
+            if request.ident:
+                # Add user message to history
+                chat_history[request.ident].append(
+                    {"role": "user", "content": request.prompt}
+                )
+
+                # Add assistant response to history
+                if not response.content:
+                    logger.error(f"Response missing content: {response}")
+                    raise HTTPException(status_code=500, detail="Response missing content")
+                
+                chat_history[request.ident].append(
+                    {"role": "assistant", "content": response.content}
+                )
+
+                # Keep only the last 5 messages
+                chat_history[request.ident] = chat_history[request.ident][-5:]
+
+                return StructuredChatResponse(
+                    content=response.content,
+                    tool_calls=tool_calls,
+                    history=chat_history[request.ident],
+                    parsed_content=parsed_content
+                )
+            else:
+                if not response.content:
+                    logger.error(f"Response missing content: {response}")
+                    raise HTTPException(status_code=500, detail="Response missing content")
+                return StructuredChatResponse(
+                    content=response.content,
+                    tool_calls=tool_calls,
+                    parsed_content=parsed_content
+                )
 
         except Exception as e:
             logger.error(f"Error processing chat: {str(e)}", exc_info=True)
