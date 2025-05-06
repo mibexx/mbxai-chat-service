@@ -293,25 +293,17 @@ async def chat_json(request: ChatRequest) -> StructuredChatResponse:
             tool_calls = message.tool_calls or []
 
             # Get content and parsed content
-            content = message.content
-            parsed_content = None
-            if hasattr(message, "parsed"):
-                parsed_content = message.parsed
+            content = message.content or ""
+            parsed_content = message.parsed or {}
 
             # Update history if ident is provided
             if request.ident:
-                # Add user message to history
                 chat_history[request.ident].append(
                     {"role": "user", "content": request.prompt}
                 )
-
-                # Add assistant response to history
-                if not content:
-                    logger.error(f"Response missing content: {response}")
-                    raise HTTPException(status_code=500, detail="Response missing content")
                 
                 chat_history[request.ident].append(
-                    {"role": "assistant", "content": content}
+                    {"role": "user", "content": content, "parsed": parsed_content}
                 )
 
                 # Keep only the last 5 messages
