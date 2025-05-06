@@ -123,56 +123,73 @@ async def chat(request: ChatRequest) -> ChatResponse:
 
         # Process the chat using OpenRouter
         logger.debug(f"Sending chat request with messages: {messages}")
-        response = await client.chat(
-            messages=messages
-        )
-        logger.debug(f"Received response: {response}")
+        try:
+            response = await client.chat(
+                messages=messages
+            )
+            logger.debug(f"Received response type: {type(response)}")
+            logger.debug(f"Received response: {response}")
 
-        # Extract tool calls from the response
-        tool_calls = []
-        if response and "tool_calls" in response:
-            logger.debug(f"Found tool_calls in response: {response['tool_calls']}")
-            for tool_call in response["tool_calls"]:
-                logger.debug(f"Processing tool call: {tool_call}")
-                if not tool_call or "function" not in tool_call:
-                    logger.warning(f"Skipping invalid tool call: {tool_call}")
-                    continue
-                
-                logger.debug(f"Tool call function: {tool_call['function']}")
-                tool_calls.append(
-                    ToolCall(
-                        name=tool_call["function"]["name"],
-                        arguments=tool_call["function"]["arguments"],
-                        result=tool_call.get("result"),
+            if response is None:
+                logger.error("Received None response from client.chat")
+                raise HTTPException(status_code=500, detail="Received empty response from chat service")
+
+            # Extract tool calls from the response
+            tool_calls = []
+            if "tool_calls" in response:
+                logger.debug(f"Found tool_calls in response: {response['tool_calls']}")
+                for tool_call in response["tool_calls"]:
+                    logger.debug(f"Processing tool call: {tool_call}")
+                    if not tool_call or "function" not in tool_call:
+                        logger.warning(f"Skipping invalid tool call: {tool_call}")
+                        continue
+                    
+                    logger.debug(f"Tool call function: {tool_call['function']}")
+                    tool_calls.append(
+                        ToolCall(
+                            name=tool_call["function"]["name"],
+                            arguments=tool_call["function"]["arguments"],
+                            result=tool_call.get("result"),
+                        )
                     )
+            else:
+                logger.debug("No tool calls found in response")
+
+            # Update history if ident is provided
+            if request.ident:
+                logger.debug(f"Updating history for ident: {request.ident}")
+                # Add user message to history
+                chat_history[request.ident].append(
+                    {"role": "user", "content": request.prompt}
                 )
-        else:
-            logger.debug("No tool calls found in response")
 
-        # Update history if ident is provided
-        if request.ident:
-            logger.debug(f"Updating history for ident: {request.ident}")
-            # Add user message to history
-            chat_history[request.ident].append(
-                {"role": "user", "content": request.prompt}
-            )
+                # Add assistant response to history
+                if "content" not in response:
+                    logger.error(f"Response missing content: {response}")
+                    raise HTTPException(status_code=500, detail="Response missing content")
+                
+                chat_history[request.ident].append(
+                    {"role": "assistant", "content": response["content"]}
+                )
 
-            # Add assistant response to history
-            chat_history[request.ident].append(
-                {"role": "assistant", "content": response["content"]}
-            )
+                # Keep only the last 5 messages
+                chat_history[request.ident] = chat_history[request.ident][-5:]
+                logger.debug(f"Updated history: {chat_history[request.ident]}")
 
-            # Keep only the last 5 messages
-            chat_history[request.ident] = chat_history[request.ident][-5:]
-            logger.debug(f"Updated history: {chat_history[request.ident]}")
+                return ChatResponse(
+                    response=response["content"],
+                    tool_calls=tool_calls,
+                    history=chat_history[request.ident],
+                )
+            else:
+                if "content" not in response:
+                    logger.error(f"Response missing content: {response}")
+                    raise HTTPException(status_code=500, detail="Response missing content")
+                return ChatResponse(response=response["content"], tool_calls=tool_calls)
 
-            return ChatResponse(
-                response=response["content"],
-                tool_calls=tool_calls,
-                history=chat_history[request.ident],
-            )
-        else:
-            return ChatResponse(response=response["content"], tool_calls=tool_calls)
+        except Exception as e:
+            logger.error(f"Error processing chat: {str(e)}", exc_info=True)
+            raise HTTPException(status_code=500, detail=f"Failed to process chat: {str(e)}")
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to process chat: {str(e)}")
