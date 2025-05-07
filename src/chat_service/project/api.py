@@ -203,7 +203,7 @@ async def chat(request: ChatRequest) -> StructuredChatResponse:
         request: The chat request containing the prompt and optional parameters
 
     Returns:
-        ChatResponse containing the response, tool calls, and message history
+        StructuredChatResponse containing the parsed answers
     """
     try:
         # Initialize OpenRouter client
@@ -272,13 +272,14 @@ async def chat(request: ChatRequest) -> StructuredChatResponse:
             logger.info(f"Structured response received: {response}")
 
             if not response or not response.choices:
-                logger.error("Received empty response from client.chat")
+                logger.error("Received empty response from client.parse")
                 raise HTTPException(status_code=500, detail="Received empty response from chat service")
 
-            message = response.choices[0].message.content
-            if not message:
-                logger.error("Response missing message")
-                raise HTTPException(status_code=500, detail="Response missing message")
+            # Get the parsed response from the first choice
+            parsed_response = response.choices[0].message.parsed
+            if not parsed_response:
+                logger.error("Response missing parsed content")
+                raise HTTPException(status_code=500, detail="Response missing parsed content")
 
             # Update history if ident is provided
             if request.ident:
@@ -288,10 +289,6 @@ async def chat(request: ChatRequest) -> StructuredChatResponse:
                 )
 
                 # Add assistant response to history
-                if not message:
-                    logger.error(f"Response missing content: {response}")
-                    raise HTTPException(status_code=500, detail="Response missing content")
-                
                 chat_history[request.ident].append(
                     response.choices[0].message.dict()
                 )
@@ -299,15 +296,10 @@ async def chat(request: ChatRequest) -> StructuredChatResponse:
                 # Keep only the last 5 messages
                 chat_history[request.ident] = chat_history[request.ident][-5:]
 
-                return ChatResponse(
-                    response=message,
-                    history=chat_history[request.ident],
-                )
-            else:
-                if not message:
-                    logger.error(f"Response missing content: {response}")
-                    raise HTTPException(status_code=500, detail="Response missing content")
-                return ChatResponse(response=message)
+            # Ensure we return a StructuredChatResponse
+            if isinstance(parsed_response, dict):
+                return StructuredChatResponse(**parsed_response)
+            return parsed_response
 
         except Exception as e:
             logger.error(f"Error processing chat: {str(e)}", exc_info=True)
