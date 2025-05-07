@@ -269,6 +269,7 @@ async def chat(request: ChatRequest) -> StructuredChatResponse:
                 response_format=StructuredChatResponse,
                 model=OpenRouterModel.GPT41
             )
+            logger.info(f"Structured response received: {response}")
 
             if not response or not response.choices:
                 logger.error("Received empty response from client.chat")
