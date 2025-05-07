@@ -98,10 +98,11 @@ async def chat(request: ChatRequest) -> ChatResponse:
         # Get MCP config and connect to server if configured
         mcp_config = get_mcp_config()
         if mcp_config.server_url:
-            await client.register_mcp_server(
+            client.register_mcp_server(
                 name="mcp-server",
                 base_url=mcp_config.server_url
             )
+            logger.info("MCP server registered")
 
         # Prepare messages for the chat
         messages = []
@@ -140,7 +141,8 @@ async def chat(request: ChatRequest) -> ChatResponse:
 
         # Process the chat using OpenRouter
         try:
-            response = await client.chat(
+            logger.info(f"Processing chat with messages: {messages}")
+            response = client.chat(
                 messages=messages,
                 model=OpenRouterModel.GPT41
             )
