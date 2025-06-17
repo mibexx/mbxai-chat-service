@@ -32,6 +32,9 @@ class ChatMessage(BaseModel):
     """Model for a single chat message."""
     role: str = Field(..., description="The role of the message sender (system, user, or assistant)")
     content: str = Field(..., description="The content of the message")
+    type: str = Field("input_text", description="The type of the message (input_text, input_image, input_file)")
+    file_data: Optional[str] = Field(None, description="The base64 encoded data of the file if the type is input_file")
+    image_url: Optional[str] = Field(None, description="The base64 encoded data of the image (data:image/jpeg;base64,\{base64_image\}) or the url to image if the type is input_image")
 
 
 class ChatRequest(BaseModel):
@@ -65,6 +68,7 @@ class Answer(BaseModel):
     content: str
     context: str
 
+
 class StructuredChatResponse(BaseModel):
     """Structured chat response model with parsed content."""
 
@@ -76,6 +80,57 @@ class ChatResponseFormat(BaseModel):
 
     content: str
     tool_calls: Optional[list[ToolCall]] = None
+
+
+def convert_to_openai_format(message: ChatMessage) -> dict[str, Any]:
+    """Convert a ChatMessage to OpenAI format.
+    
+    Args:
+        message: The ChatMessage to convert
+        
+    Returns:
+        dict: Message in OpenAI format
+    """
+    if message.type == "input_text":
+        return {
+            "role": message.role,
+            "content": message.content
+        }
+    elif message.type == "input_image":
+        return {
+            "role": message.role,
+            "content": [
+                {
+                    "type": "text",
+                    "text": message.content
+                },
+                {
+                    "type": "image_url",
+                    "image_url": {
+                        "url": message.image_url
+                    }
+                }
+            ]
+        }
+    elif message.type == "input_file":
+        return {
+            "role": message.role,
+            "content": [
+                {
+                    "type": "file",
+                    "file": {
+                        "filename": "file",  # You might want to add filename to your model
+                        "file_data": message.file_data
+                    }
+                },
+                {
+                    "type": "text",
+                    "text": message.content
+                }
+            ]
+        }
+    else:
+        raise ValueError(f"Unknown message type: {message.type}")
 
 
 @router.post("/chat", response_model=ChatResponse)
@@ -123,8 +178,9 @@ async def chat(request: ChatRequest) -> ChatResponse:
                 # Add existing history
                 messages.extend(chat_history[request.ident])
 
-        # Add the new messages
-        messages.extend([msg.dict() for msg in request.messages])
+        # Convert and add the new messages
+        converted_messages = [convert_to_openai_format(msg) for msg in request.messages]
+        messages.extend(converted_messages)
 
         # Process the chat using OpenRouter
         try:
@@ -169,100 +225,6 @@ async def chat(request: ChatRequest) -> ChatResponse:
                     logger.error(f"Response missing content: {response}")
                     raise HTTPException(status_code=500, detail="Response missing content")
                 return ChatResponse(response=message)
-
-        except Exception as e:
-            logger.error(f"Error processing chat: {str(e)}", exc_info=True)
-            raise HTTPException(status_code=500, detail=f"Failed to process chat: {str(e)}")
-
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to process chat: {str(e)}")
-
-
-@router.post("/chat-struct", response_model=StructuredChatResponse)
-async def chat(request: ChatRequest) -> StructuredChatResponse:
-    """Process a chat message and maintain history if ident is provided.
-
-    Args:
-        request: The chat request containing the messages and optional parameters
-
-    Returns:
-        StructuredChatResponse containing the parsed answers
-    """
-    try:
-        # Initialize OpenRouter client
-        openrouter_config = get_openrouter_api_config()
-        openrouter_client = OpenRouterClient(
-            token=openrouter_config.api_key,
-            base_url=openrouter_config.base_url,
-            model=OpenRouterModel.GPT41
-        )
-
-        # Initialize MCP client with OpenRouter client
-        client = MCPClient(openrouter_client)
-
-        # Get MCP config and connect to server if configured
-        mcp_config = get_mcp_config()
-        if mcp_config.server_url:
-            client.register_mcp_server(
-                name="mcp-server",
-                base_url=mcp_config.server_url
-            )
-            logger.info("MCP server registered")
-
-        # Prepare messages for the chat
-        messages = []
-
-        # Handle history and cleaning
-        if request.ident:
-            if request.clean:
-                # Clear history for the ident
-                chat_history[request.ident] = []
-            elif request.ident not in chat_history:
-                chat_history[request.ident] = []
-            else:
-                # Add existing history
-                messages.extend(chat_history[request.ident])
-
-        # Add the new messages
-        messages.extend([msg.dict() for msg in request.messages])
-
-        # Process the chat using OpenRouter
-        try:
-            logger.info(f"Processing chat with messages: {messages}")
-            response = client.parse(
-                messages=messages,
-                response_format=StructuredChatResponse,
-                model=OpenRouterModel.GPT41
-            )
-            logger.info(f"Structured response received: {response}")
-
-            if not response or not response.choices:
-                logger.error("Received empty response from client.parse")
-                raise HTTPException(status_code=500, detail="Received empty response from chat service")
-
-            # Get the parsed response from the first choice
-            parsed_response = response.choices[0].message.parsed
-            if not parsed_response:
-                logger.error("Response missing parsed content")
-                raise HTTPException(status_code=500, detail="Response missing parsed content")
-
-            # Update history if ident is provided
-            if request.ident:
-                # Add new messages to history
-                chat_history[request.ident].extend([msg.dict() for msg in request.messages])
-
-                # Add assistant response to history
-                chat_history[request.ident].append(
-                    response.choices[0].message.dict()
-                )
-
-                # Keep only the last 5 messages
-                chat_history[request.ident] = chat_history[request.ident][-5:]
-
-            # Ensure we return a StructuredChatResponse
-            if isinstance(parsed_response, dict):
-                return StructuredChatResponse(**parsed_response)
-            return parsed_response
 
         except Exception as e:
             logger.error(f"Error processing chat: {str(e)}", exc_info=True)
