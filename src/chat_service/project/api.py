@@ -28,13 +28,16 @@ class ToolCall(BaseModel):
     result: Optional[str] = None
 
 
+class ChatMessage(BaseModel):
+    """Model for a single chat message."""
+    role: str = Field(..., description="The role of the message sender (system, user, or assistant)")
+    content: str = Field(..., description="The content of the message")
+
+
 class ChatRequest(BaseModel):
     """Chat request model."""
 
-    prompt: str = Field(..., description="The user's message prompt")
-    system_prompt: Optional[str] = Field(
-        None, description="Optional system prompt to set the context"
-    )
+    messages: list[ChatMessage] = Field(..., description="List of chat messages")
     ident: Optional[str] = Field(
         None, description="Optional identifier to maintain chat history"
     )
@@ -80,7 +83,7 @@ async def chat(request: ChatRequest) -> ChatResponse:
     """Process a chat message and maintain history if ident is provided.
 
     Args:
-        request: The chat request containing the prompt and optional parameters
+        request: The chat request containing the messages and optional parameters
 
     Returns:
         ChatResponse containing the response, tool calls, and message history
@@ -120,26 +123,8 @@ async def chat(request: ChatRequest) -> ChatResponse:
                 # Add existing history
                 messages.extend(chat_history[request.ident])
 
-        # Add system prompt if provided
-        if request.system_prompt:
-            # Check if this system prompt is already in the history
-            has_system_prompt = any(
-                msg["role"] == "system" and msg["content"] == request.system_prompt
-                for msg in messages
-            )
-
-            if not has_system_prompt:
-                # Add system prompt to messages for this request
-                messages.append({"role": "system", "content": request.system_prompt})
-
-                # Add system prompt to history if ident is provided
-                if request.ident:
-                    chat_history[request.ident].append(
-                        {"role": "system", "content": request.system_prompt}
-                    )
-
-        # Add the current user message
-        messages.append({"role": "user", "content": request.prompt})
+        # Add the new messages
+        messages.extend([msg.dict() for msg in request.messages])
 
         # Process the chat using OpenRouter
         try:
@@ -160,10 +145,8 @@ async def chat(request: ChatRequest) -> ChatResponse:
 
             # Update history if ident is provided
             if request.ident:
-                # Add user message to history
-                chat_history[request.ident].append(
-                    {"role": "user", "content": request.prompt}
-                )
+                # Add new messages to history
+                chat_history[request.ident].extend([msg.dict() for msg in request.messages])
 
                 # Add assistant response to history
                 if not message:
@@ -200,7 +183,7 @@ async def chat(request: ChatRequest) -> StructuredChatResponse:
     """Process a chat message and maintain history if ident is provided.
 
     Args:
-        request: The chat request containing the prompt and optional parameters
+        request: The chat request containing the messages and optional parameters
 
     Returns:
         StructuredChatResponse containing the parsed answers
@@ -240,26 +223,8 @@ async def chat(request: ChatRequest) -> StructuredChatResponse:
                 # Add existing history
                 messages.extend(chat_history[request.ident])
 
-        # Add system prompt if provided
-        if request.system_prompt:
-            # Check if this system prompt is already in the history
-            has_system_prompt = any(
-                msg["role"] == "system" and msg["content"] == request.system_prompt
-                for msg in messages
-            )
-
-            if not has_system_prompt:
-                # Add system prompt to messages for this request
-                messages.append({"role": "system", "content": request.system_prompt})
-
-                # Add system prompt to history if ident is provided
-                if request.ident:
-                    chat_history[request.ident].append(
-                        {"role": "system", "content": request.system_prompt}
-                    )
-
-        # Add the current user message
-        messages.append({"role": "user", "content": request.prompt})
+        # Add the new messages
+        messages.extend([msg.dict() for msg in request.messages])
 
         # Process the chat using OpenRouter
         try:
@@ -283,10 +248,8 @@ async def chat(request: ChatRequest) -> StructuredChatResponse:
 
             # Update history if ident is provided
             if request.ident:
-                # Add user message to history
-                chat_history[request.ident].append(
-                    {"role": "user", "content": request.prompt}
-                )
+                # Add new messages to history
+                chat_history[request.ident].extend([msg.dict() for msg in request.messages])
 
                 # Add assistant response to history
                 chat_history[request.ident].append(
