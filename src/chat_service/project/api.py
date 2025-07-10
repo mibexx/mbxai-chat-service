@@ -80,6 +80,24 @@ class StructuredChatResponse(BaseModel):
     messages: list[StructuredMessage] = Field(..., description="List of response messages")
 
 
+class StructuredResponseMessage(BaseModel):
+    """Message model for structured responses - all fields required, no defaults."""
+    type: str = Field(..., description="The type of message: text, image, file, or code")
+    text: str = Field(..., description="Text content for text messages or captions for image messages")
+    image_url: str = Field(..., description="URL or base64 data for image messages (empty string if not applicable)")
+    file_name: str = Field(..., description="Name of the file for file messages (empty string if not applicable)")
+    file_size: int = Field(..., description="Size of the file in bytes for file messages (0 if not applicable)")
+    file_data: str = Field(..., description="Base64 encoded file data for file messages (empty string if not applicable)")
+    language: str = Field(..., description="Programming language for code messages (empty string if not applicable)")
+    sender: str = Field(..., description="Sender identifier")
+    timestamp: str = Field(..., description="Message timestamp (empty string if not provided)")
+
+
+class StructuredResponseFormat(BaseModel):
+    """Response format for structured chat parsing."""
+    messages: list[StructuredResponseMessage] = Field(..., description="List of structured response messages")
+
+
 class ChatResponse(BaseModel):
     """Chat response model."""
 
@@ -420,40 +438,58 @@ async def structured_chat(request: StructuredChatRequest) -> StructuredChatRespo
         # Add a system message to provide context about the structured response
         system_message = {
             "role": "system",
-            "content": "You are a helpful assistant that responds to various types of messages including text, images, files, and code. Provide appropriate responses based on the message type and content."
+            "content": """You are a helpful assistant that responds with structured messages. You MUST provide ALL fields for each message:
+
+- For text responses: type='text', text='your message', image_url='', file_name='', file_size=0, file_data='', language='', sender='assistant', timestamp=''
+- For images: type='image', text='optional caption', image_url='actual_url', file_name='', file_size=0, file_data='', language='', sender='assistant', timestamp=''
+- For code: type='code', text='code content', image_url='', file_name='', file_size=0, file_data='', language='programming_language', sender='assistant', timestamp=''
+- For files: type='file', text='description', image_url='', file_name='filename', file_size=123, file_data='base64_data', language='', sender='assistant', timestamp=''
+
+ALL fields are required. Use empty strings ('') for unused text fields and 0 for unused numbers."""
         }
         openai_messages.insert(0, system_message)
 
         try:
             logger.info(f"Processing structured chat with {len(request.messages)} messages")
             
-            # Process the chat using OpenRouter
-            response = client.chat(
+            # Use parse method for structured responses
+            response = client.parse(
                 messages=openai_messages,
+                response_format=StructuredResponseFormat,
                 model=OpenRouterModel.GPT41
             )
 
             if not response or not response.choices:
-                logger.error("Received empty response from client.chat")
+                logger.error("Received empty response from AI client")
                 # Fallback to structured response generation
                 response_messages = generate_structured_response(request.messages)
                 return StructuredChatResponse(messages=response_messages)
 
-            ai_response = response.choices[0].message.content
-            if not ai_response:
-                logger.error("Response missing message content")
+            if not hasattr(response.choices[0].message, "parsed"):
+                logger.error(f"Received no parsed response from AI client: {response.choices[0].message}")
                 # Fallback to structured response generation
                 response_messages = generate_structured_response(request.messages)
                 return StructuredChatResponse(messages=response_messages)
 
-            # Create structured response from AI response
-            response_messages = [StructuredMessage(
-                type="text",
-                text=ai_response,
-                sender="assistant"
-            )]
-
-            return StructuredChatResponse(messages=response_messages)
+            parsed_response = response.choices[0].message.parsed
+            
+            # Convert StructuredResponseMessage to StructuredMessage for the response
+            converted_messages = []
+            for msg in parsed_response.messages:
+                converted_msg = StructuredMessage(
+                    type=msg.type,
+                    text=msg.text if msg.text else None,
+                    image_url=msg.image_url if msg.image_url else None,
+                    file_name=msg.file_name if msg.file_name else None,
+                    file_size=msg.file_size if msg.file_size > 0 else None,
+                    file_data=msg.file_data if msg.file_data else None,
+                    language=msg.language if msg.language else None,
+                    sender=msg.sender,
+                    timestamp=msg.timestamp if msg.timestamp else None
+                )
+                converted_messages.append(converted_msg)
+            
+            return StructuredChatResponse(messages=converted_messages)
 
         except Exception as e:
             logger.error(f"Error processing structured chat: {str(e)}", exc_info=True)
