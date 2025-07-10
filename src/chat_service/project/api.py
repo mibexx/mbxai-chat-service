@@ -34,7 +34,7 @@ class ChatMessage(BaseModel):
     content: str = Field(..., description="The content of the message")
     type: str = Field("input_text", description="The type of the message (input_text, input_image, input_file)")
     file_data: Optional[str] = Field(None, description="The base64 encoded data of the file if the type is input_file")
-    image_url: Optional[str] = Field(None, description="The base64 encoded data of the image (data:image/jpeg;base64,\{base64_image\}) or the url to image if the type is input_image")
+    image_url: Optional[str] = Field(None, description="The base64 encoded data of the image (data:image/jpeg;base64,{base64_image}) or the url to image if the type is input_image")
 
 
 class StructuredMessage(BaseModel):
@@ -94,8 +94,8 @@ class Answer(BaseModel):
     context: str
 
 
-class StructuredChatResponse(BaseModel):
-    """Structured chat response model with parsed content."""
+class ParsedChatResponse(BaseModel):
+    """Parsed chat response model with analyzed content."""
 
     answers: list[Answer]
 
