@@ -78,6 +78,7 @@ class StructuredChatRequest(BaseModel):
 class StructuredChatResponse(BaseModel):
     """Structured chat response model."""
     messages: list[StructuredMessage] = Field(..., description="List of response messages")
+    suggestions: list[str] = Field(..., description="3-5 suggestions for the next user message")
 
 
 class StructuredResponseMessage(BaseModel):
@@ -96,6 +97,7 @@ class StructuredResponseMessage(BaseModel):
 class StructuredResponseFormat(BaseModel):
     """Response format for structured chat parsing."""
     messages: list[StructuredResponseMessage] = Field(..., description="List of structured response messages")
+    suggestions: list[str] = Field(..., description="Exactly 3-5 suggestions for what the user might want to ask or do next")
 
 
 class ChatResponse(BaseModel):
@@ -333,14 +335,14 @@ def convert_structured_message_to_openai(message: StructuredMessage) -> dict[str
         }
 
 
-def generate_structured_response(messages: list[StructuredMessage]) -> list[StructuredMessage]:
+def generate_structured_response(messages: list[StructuredMessage]) -> tuple[list[StructuredMessage], list[str]]:
     """Generate appropriate responses based on input message types.
     
     Args:
         messages: List of input messages
         
     Returns:
-        List of response messages
+        Tuple of (response messages, suggestions for next user message)
     """
     responses = []
     
@@ -398,7 +400,47 @@ console.log(`Factorial of 5 is ${result}`);""",
                 sender="assistant"
             ))
     
-    return responses
+    # Generate suggestions based on the conversation context
+    suggestions = []
+    has_code = any(msg.type == "code" for msg in messages)
+    has_image = any(msg.type == "image" for msg in messages)
+    has_file = any(msg.type == "file" for msg in messages)
+    
+    if has_code:
+        suggestions.extend([
+            "Can you explain how this code works?",
+            "Are there any performance improvements possible?",
+            "Show me a different approach to solve this"
+        ])
+    elif has_image:
+        suggestions.extend([
+            "Can you generate a similar image?",
+            "What else can you tell me about this image?",
+            "Create a variation of this image"
+        ])
+    elif has_file:
+        suggestions.extend([
+            "Can you analyze the content of this file?",
+            "What format should I convert this to?",
+            "How can I process this file?"
+        ])
+    else:
+        suggestions.extend([
+            "Can you give me more details?",
+            "Show me an example",
+            "What are the best practices?",
+            "How can I learn more about this?"
+        ])
+    
+    # Ensure we have 3-5 suggestions
+    if len(suggestions) < 3:
+        suggestions.extend([
+            "Ask me something else",
+            "Need help with a different topic?",
+            "What would you like to explore next?"
+        ])
+    
+    return responses, suggestions[:5]  # Limit to max 5 suggestions
 
 
 @router.post("/structured-chat", response_model=StructuredChatResponse)
@@ -438,14 +480,17 @@ async def structured_chat(request: StructuredChatRequest) -> StructuredChatRespo
         # Add a system message to provide context about the structured response
         system_message = {
             "role": "system",
-            "content": """You are a helpful assistant that responds with structured messages. You MUST provide ALL fields for each message:
+            "content": """You are a helpful assistant that responds with structured messages. You MUST provide ALL fields for each message AND provide 3-5 suggestions for what the user might want to ask or do next:
 
+MESSAGE FORMATS (ALL fields required):
 - For text responses: type='text', text='your message', image_url='', file_name='', file_size=0, file_data='', language='', sender='assistant', timestamp=''
 - For images: type='image', text='optional caption', image_url='actual_url', file_name='', file_size=0, file_data='', language='', sender='assistant', timestamp=''
 - For code: type='code', text='code content', image_url='', file_name='', file_size=0, file_data='', language='programming_language', sender='assistant', timestamp=''
 - For files: type='file', text='description', image_url='', file_name='filename', file_size=123, file_data='base64_data', language='', sender='assistant', timestamp=''
 
-ALL fields are required. Use empty strings ('') for unused text fields and 0 for unused numbers."""
+SUGGESTIONS: Provide exactly 3-5 helpful suggestions for what the user might want to ask, do, or explore next based on the current conversation context. Make them specific and actionable.
+
+Use empty strings ('') for unused text fields and 0 for unused numbers."""
         }
         openai_messages.insert(0, system_message)
 
@@ -462,14 +507,14 @@ ALL fields are required. Use empty strings ('') for unused text fields and 0 for
             if not response or not response.choices:
                 logger.error("Received empty response from AI client")
                 # Fallback to structured response generation
-                response_messages = generate_structured_response(request.messages)
-                return StructuredChatResponse(messages=response_messages)
+                response_messages, suggestions = generate_structured_response(request.messages)
+                return StructuredChatResponse(messages=response_messages, suggestions=suggestions)
 
             if not hasattr(response.choices[0].message, "parsed"):
                 logger.error(f"Received no parsed response from AI client: {response.choices[0].message}")
                 # Fallback to structured response generation
-                response_messages = generate_structured_response(request.messages)
-                return StructuredChatResponse(messages=response_messages)
+                response_messages, suggestions = generate_structured_response(request.messages)
+                return StructuredChatResponse(messages=response_messages, suggestions=suggestions)
 
             parsed_response = response.choices[0].message.parsed
             
@@ -489,13 +534,16 @@ ALL fields are required. Use empty strings ('') for unused text fields and 0 for
                 )
                 converted_messages.append(converted_msg)
             
-            return StructuredChatResponse(messages=converted_messages)
+            return StructuredChatResponse(
+                messages=converted_messages,
+                suggestions=parsed_response.suggestions
+            )
 
         except Exception as e:
             logger.error(f"Error processing structured chat: {str(e)}", exc_info=True)
             # Fallback to structured response generation
-            response_messages = generate_structured_response(request.messages)
-            return StructuredChatResponse(messages=response_messages)
+            response_messages, suggestions = generate_structured_response(request.messages)
+            return StructuredChatResponse(messages=response_messages, suggestions=suggestions)
 
     except Exception as e:
         logger.error(f"Failed to process structured chat: {str(e)}", exc_info=True)
